@@ -124,11 +124,11 @@
 
 {% if bixbench_results_missing %}
 <div class="alert alert-warning">
-    <strong>Baseline results not loaded.</strong> Aggregate metrics and charts require the
-    <code>BixBench/bixbench-v1.5_results/</code> and <code>BixBench/bixbench_results/</code> in this directory
-    (alongside <code>app.py</code>). On Render, set the service root directory to <code>explorer</code> and
-    ensure <code>BixBench/</code> is included in the deploy, then redeploy.
-    <a href="/questions" class="alert-link">Browse the 205-question catalog</a> (loaded from Hugging Face).
+    <strong>Baseline results not loaded.</strong> The app downloads these CSV/JSON files from the upstream
+    <code>Future-House/BixBench</code> repo on startup when missing. If you still see this, outbound HTTPS may be blocked,
+    the download failed, or fetching was disabled (<code>BIXBENCH_SKIP_REMOTE_FETCH</code>). You can also vendor
+    <code>BixBench/bixbench-v1.5_results/</code> and <code>BixBench/bixbench_results/</code> next to <code>app.py</code>
+    (on Render, set the service root to <code>explorer</code>). <a href="/questions" class="alert-link">Browse the catalog</a> (Hugging Face).
 </div>
 {% endif %}
 

@@ -3,6 +3,8 @@ import ast
 import json
 import shutil
 import zipfile
+import urllib.request
+from urllib.error import URLError
 from pathlib import Path
 from typing import Optional, Tuple
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
@@ -25,6 +27,58 @@ DATASET_COMPBIO = 'compbiobench'
 # App root is the explorer/ directory (local cwd and Render service root).
 APP_ROOT = Path(__file__).resolve().parent
 BIXBENCH_DIR = APP_ROOT / 'BixBench'
+
+# Baseline CSVs/JSON ship in the upstream BixBench repo but are often absent on deploy
+# (explorer/BixBench/ is not committed). Fetch from raw GitHub when any required file is missing.
+_BIXBENCH_UPSTREAM_RAW_DEFAULT = (
+    'https://raw.githubusercontent.com/Future-House/BixBench/main'
+)
+_BIXBENCH_UPSTREAM_REL_PATHS = (
+    'bixbench-v1.5_results/zero_shot_baselines.json',
+    'bixbench-v1.5_results/zero_shot_baselines/claude-3-5-sonnet-latest-grader-mcq-refusal-False.csv',
+    'bixbench-v1.5_results/zero_shot_baselines/claude-3-5-sonnet-latest-grader-mcq-refusal-True.csv',
+    'bixbench-v1.5_results/zero_shot_baselines/claude-3-5-sonnet-latest-grader-openended.csv',
+    'bixbench-v1.5_results/zero_shot_baselines/gpt-4o-grader-mcq-refusal-False.csv',
+    'bixbench-v1.5_results/zero_shot_baselines/gpt-4o-grader-mcq-refusal-True.csv',
+    'bixbench-v1.5_results/zero_shot_baselines/gpt-4o-grader-openended.csv',
+    'bixbench_results/zero_shot_baselines.json',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_False_mcq_claude-3-5-sonnet-latest_1.0.csv',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_False_mcq_gpt-4o_1.0.csv',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_mcq_claude-3-5-sonnet-latest_1.0.csv',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_mcq_gpt-4o_1.0.csv',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_openended_claude-3-5-sonnet-latest_1.0.csv',
+    'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_openended_gpt-4o_1.0.csv',
+)
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _download_file(url: str, dest: Path, timeout_sec: int = 120) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(url, headers={'User-Agent': 'biobench-explorer/1'})
+    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        dest.write_bytes(resp.read())
+
+
+def _ensure_bixbench_baseline_files() -> None:
+    """Populate BixBench/ baseline artifacts from upstream GitHub when missing."""
+    if _env_truthy('BIXBENCH_SKIP_REMOTE_FETCH'):
+        return
+    missing = [rel for rel in _BIXBENCH_UPSTREAM_REL_PATHS if not (BIXBENCH_DIR / rel).is_file()]
+    if not missing:
+        return
+    raw_base = os.environ.get('BIXBENCH_UPSTREAM_RAW', _BIXBENCH_UPSTREAM_RAW_DEFAULT).rstrip('/')
+    print(f"BixBench baselines missing locally; fetching {len(missing)} file(s) from {raw_base!r}")
+    for rel in missing:
+        url = f'{raw_base}/{rel}'
+        dest = BIXBENCH_DIR / rel
+        try:
+            _download_file(url, dest)
+        except URLError as e:
+            print(f"Warning: could not download BixBench baseline ({rel}): {e}")
+
 
 # Columns expected on local zero-shot CSVs merged with benchmark metadata — used across
 # /questions, /questions/<id>, /capsules, /compare when evaluation results are enabled.
@@ -83,6 +137,8 @@ def load_data():
     if hf_token:
         # `huggingface_hub` / `datasets` read HF_TOKEN; Render often sets HUGGING_FACE_HUB_TOKEN only.
         os.environ['HF_TOKEN'] = hf_token
+
+    _ensure_bixbench_baseline_files()
 
     base_path = BIXBENCH_DIR
 

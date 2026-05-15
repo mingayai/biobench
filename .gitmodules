@@ -1,0 +1,3 @@
+[submodule "explorer/BixBench"]
+	path = explorer/BixBench
+	url = https://github.com/Future-House/BixBench.git
