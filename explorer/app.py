@@ -21,7 +21,6 @@ app.config['MIN_FREE_DISK_BYTES'] = int(os.environ.get('MIN_FREE_DISK_MB', '200'
 
 DATASET_BIXBENCH = 'bixbench'
 DATASET_COMPBIO = 'compbiobench'
-DATASET_BIOMYSTERY = 'biomysterybench'
 
 # Columns expected on local zero-shot CSVs merged with benchmark metadata — used across
 # /questions, /questions/<id>, /capsules, /compare when evaluation results are enabled.
@@ -44,7 +43,7 @@ class CapsuleTooLargeError(Exception):
 
 def current_dataset():
     ds = request.args.get('dataset', DATASET_BIXBENCH)
-    return ds if ds in (DATASET_BIXBENCH, DATASET_COMPBIO, DATASET_BIOMYSTERY) else DATASET_BIXBENCH
+    return ds if ds in (DATASET_BIXBENCH, DATASET_COMPBIO) else DATASET_BIXBENCH
 
 
 @app.context_processor
@@ -60,7 +59,6 @@ def inject_dataset():
     return dict(
         current_dataset=ds,
         dataset_qs=dataset_qs,
-        is_biomystery=ds == DATASET_BIOMYSTERY,
     )
 
 
@@ -73,7 +71,6 @@ data = {
     'capsules': {},
     'benchmark': None,  # HuggingFace benchmark dataset
     'compbiobench': None,  # CompBioBench v1 catalog (TSV)
-    'biomysterybench': None,  # BioMysteryBench problems CSV
 }
 
 def load_data():
@@ -194,19 +191,6 @@ def load_data():
     except Exception as e:
         print(f"Warning: Could not load CompBioBench TSV: {e}")
         data['compbiobench'] = pd.DataFrame()
-
-    # BioMysteryBench problems CSV
-    bmb_path = Path(__file__).parent.parent / 'BioMysteryBench-full' / 'problems.csv'
-    try:
-        if bmb_path.exists():
-            data['biomysterybench'] = pd.read_csv(bmb_path)
-            print(f"Loaded {len(data['biomysterybench'])} BioMysteryBench problems from {bmb_path.name}")
-        else:
-            print(f"Warning: BioMysteryBench CSV not found at {bmb_path}")
-            data['biomysterybench'] = pd.DataFrame()
-    except Exception as e:
-        print(f"Warning: Could not load BioMysteryBench CSV: {e}")
-        data['biomysterybench'] = pd.DataFrame()
 
     print(f"Loaded {len(data['v1_5'])} v1.5 results and {len(data['original'])} original results")
 
@@ -491,161 +475,6 @@ def _compbiobench_question_detail(qid: str):
         cb_artifacts=artifacts,
     )
 
-def _biomystery_dashboard():
-    df = data.get('biomysterybench')
-    if df is None or df.empty:
-        return render_template(
-            'dashboard.html',
-            is_compbiobench=False,
-            is_biomystery=True,
-            bmb_empty=True,
-            bmb_total=0,
-            bmb_human_solvable_rows=[],
-            bmb_allowed_domains=[],
-            v1_5_metrics={},
-            original_metrics={},
-            v1_5_chart_data={'labels': [], 'accuracy': [], 'precision': [], 'coverage': []},
-            original_chart_data={'labels': [], 'accuracy': [], 'precision': [], 'coverage': []},
-            eval_mode_stats=[],
-        )
-
-    total = len(df)
-    hs_counts = df['human_solvable'].fillna('unknown').str.lower().value_counts()
-    yes_count = int(hs_counts.get('yes', 0))
-    no_count = int(hs_counts.get('no', 0))
-    human_solvable_rows = [
-        {'label': 'Human solvable (yes)', 'count': yes_count, 'pct': round(100 * yes_count / total, 1) if total else 0},
-        {'label': 'Not human solvable (no)', 'count': no_count, 'pct': round(100 * no_count / total, 1) if total else 0},
-    ]
-
-    domains_raw = df['allowed_domains'].dropna().iloc[0] if len(df) > 0 else ''
-    allowed_domains = [d.strip() for d in str(domains_raw).split(',') if d.strip()]
-
-    return render_template(
-        'dashboard.html',
-        is_compbiobench=False,
-        is_biomystery=True,
-        bmb_empty=False,
-        bmb_total=total,
-        bmb_human_solvable_rows=human_solvable_rows,
-        bmb_allowed_domains=allowed_domains,
-        v1_5_metrics={},
-        original_metrics={},
-        v1_5_chart_data={'labels': [], 'accuracy': [], 'precision': [], 'coverage': []},
-        original_chart_data={'labels': [], 'accuracy': [], 'precision': [], 'coverage': []},
-        eval_mode_stats=[],
-    )
-
-
-def _biomystery_questions():
-    df = data.get('biomysterybench')
-    if df is None or df.empty:
-        return render_template(
-            'questions.html',
-            is_compbiobench=False,
-            is_biomystery=True,
-            questions=[],
-            page=1,
-            total_pages=1,
-            total=0,
-            filters={},
-            capsules=[], eval_modes=[], eval_types=[], models=[],
-            domains=[], styles=[], skills_options=[],
-        )
-
-    search = request.args.get('search', '').strip()
-    human_solvable = request.args.get('human_solvable', '').strip().lower()
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = 20
-
-    filtered = df.copy()
-    if search:
-        mask = (
-            filtered['id'].astype(str).str.contains(search, case=False, na=False) |
-            filtered['question'].astype(str).str.contains(search, case=False, na=False) |
-            filtered['answer_rubric'].astype(str).str.contains(search, case=False, na=False)
-        )
-        filtered = filtered[mask]
-    if human_solvable in ('yes', 'no'):
-        filtered = filtered[filtered['human_solvable'].str.lower() == human_solvable]
-
-    total = len(filtered)
-    start = (page - 1) * per_page
-    page_rows = filtered.iloc[start:start + per_page]
-
-    bmb_data_dir = Path(__file__).parent.parent / 'BioMysteryBench-full' / 'data'
-    questions_list = []
-    for _, row in page_rows.iterrows():
-        qid = str(row.get('id', ''))
-        has_data = (bmb_data_dir / f'{qid}.zip').exists()
-        questions_list.append({
-            'id': qid,
-            'question': str(row.get('question', '') or ''),
-            'question_excerpt': str(row.get('question', '') or '')[:200],
-            'human_solvable': str(row.get('human_solvable', '')).strip().lower() == 'yes',
-            'has_data': has_data,
-        })
-
-    return render_template(
-        'questions.html',
-        is_compbiobench=False,
-        is_biomystery=True,
-        questions=questions_list,
-        page=page,
-        total_pages=max(1, (total + per_page - 1) // per_page),
-        total=total,
-        filters={'search': search, 'human_solvable': human_solvable},
-        capsules=[], eval_modes=[], eval_types=[], models=[],
-        domains=[], styles=[], skills_options=[],
-    )
-
-
-def _biomystery_question_detail(qid: str):
-    df = data.get('biomysterybench')
-    if df is None or df.empty or 'id' not in df.columns:
-        return "Problem not found", 404
-    rows = df[df['id'].astype(str) == str(qid)]
-    if len(rows) == 0:
-        return "Problem not found", 404
-    row = rows.iloc[0]
-
-    domains_raw = str(row.get('allowed_domains', '') or '')
-    bmb_domains = [d.strip() for d in domains_raw.split(',') if d.strip()]
-    human_solvable = str(row.get('human_solvable', '')).strip().lower() == 'yes'
-
-    bmb_data_dir = Path(__file__).parent.parent / 'BioMysteryBench-full' / 'data'
-    data_zip = bmb_data_dir / f'{qid}.zip'
-    bmb_data_file = f'data/{qid}.zip' if data_zip.exists() else None
-
-    return render_template(
-        'question.html',
-        is_compbiobench=False,
-        is_biomystery=True,
-        uuid=qid,
-        question=str(row.get('question', '') or ''),
-        bmb_rubric=str(row.get('answer_rubric', '') or ''),
-        bmb_domains=bmb_domains,
-        bmb_human_solvable=human_solvable,
-        bmb_data_file=bmb_data_file,
-        target=None,
-        choices=None,
-        configs=[],
-        capsule_id=None,
-        hypothesis=None,
-        ideal=None,
-        distractors=None,
-        result=None,
-        answer=None,
-        paper=None,
-        cb_domain=None,
-        cb_style=None,
-        cb_curator=None,
-        cb_skills=[],
-        cb_internet=False,
-        cb_gpu=False,
-        cb_artifacts=[],
-    )
-
 
 @app.route('/')
 def dashboard():
@@ -653,8 +482,6 @@ def dashboard():
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return _compbiobench_dashboard()
-    if ds == DATASET_BIOMYSTERY:
-        return _biomystery_dashboard()
 
     v1_5_metrics = data.get('v1_5_json') or {}
     original_metrics = data.get('original_json') or {}
@@ -729,6 +556,7 @@ def dashboard():
     return render_template(
         'dashboard.html',
         is_compbiobench=False,
+        bixbench_results_missing=not _bixbench_results_available(),
         v1_5_metrics=v1_5_metrics,
         original_metrics=original_metrics,
         v1_5_chart_data=v1_5_chart_data,
@@ -743,8 +571,6 @@ def questions():
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return _compbiobench_questions()
-    if ds == DATASET_BIOMYSTERY:
-        return _biomystery_questions()
 
     if not _bixbench_results_available():
         return _bixbench_catalog_questions()
@@ -889,9 +715,6 @@ def question_detail(qid):
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return _compbiobench_question_detail(qid)
-    if ds == DATASET_BIOMYSTERY:
-        return _biomystery_question_detail(qid)
-
     if not _bixbench_results_available():
         return _bixbench_catalog_question_detail(qid)
 
@@ -1015,8 +838,6 @@ def capsules():
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
-    if ds == DATASET_BIOMYSTERY:
-        return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
 
     if not _bixbench_results_available():
         return _bixbench_catalog_capsules()
@@ -1075,8 +896,6 @@ def capsule_detail(capsule_id):
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
-    if ds == DATASET_BIOMYSTERY:
-        return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
 
     if not _bixbench_results_available():
         return _bixbench_catalog_capsule_detail(capsule_id)
@@ -1436,8 +1255,6 @@ def compare():
     ds = current_dataset()
     if ds == DATASET_COMPBIO:
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
-    if ds == DATASET_BIOMYSTERY:
-        return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
 
     if not _bixbench_results_available():
         return render_template('compare.html',

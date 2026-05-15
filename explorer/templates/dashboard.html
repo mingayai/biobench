@@ -11,13 +11,11 @@
                 <p class="text-muted small mb-0">
                     <strong>BixBench</strong> shows evaluated model results and capsules.
                     <strong>CompBioBench</strong> is the task catalog aligned with <code>compbiobench-runner</code>.
-                    <strong>BioMysteryBench</strong> has 99 bioinformatics research problems created by Anthropic.
                 </p>
             </div>
             <div class="col-md-5 text-md-end mt-3 mt-md-0">
                 <a href="/" class="btn {% if current_dataset == 'bixbench' %}btn-primary{% else %}btn-outline-primary{% endif %}">BixBench</a>
                 <a href="/?dataset=compbiobench" class="btn {% if current_dataset == 'compbiobench' %}btn-info{% else %}btn-outline-info{% endif %}">CompBioBench</a>
-                <a href="/?dataset=biomysterybench" class="btn {% if current_dataset == 'biomysterybench' %}btn-success{% else %}btn-outline-success{% endif %}">BioMysteryBench</a>
                 <a href="/questions{{ dataset_qs(True) }}" class="btn btn-secondary ms-1">Browse &rarr;</a>
             </div>
         </div>
@@ -120,71 +118,21 @@
 </div>
 {% endif %}
 
-{% elif is_biomystery %}
-<h1 class="mb-4">BioMysteryBench <span class="badge bg-success dataset-pill">problems</span></h1>
-
-{% if bmb_empty %}
-<div class="alert alert-warning">
-    No BioMysteryBench data loaded. Ensure <code>BioMysteryBench-full/problems.csv</code> exists and restart the server.
-</div>
-{% else %}
-<p class="lead text-muted">Overview of <strong>{{ bmb_total }}</strong> bioinformatics research problems created by Anthropic.</p>
-
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card h-100 border-success">
-            <div class="card-header bg-success text-white">Total Problems</div>
-            <div class="card-body">
-                <p class="display-6 mb-0">{{ bmb_total }}</p>
-                <span class="text-muted">problems</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-header">Human Solvability</div>
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0">
-                    <thead><tr><th></th><th>Count</th><th>%</th></tr></thead>
-                    <tbody>
-                        {% for row in bmb_human_solvable_rows %}
-                        <tr>
-                            <td>{{ row.label }}</td>
-                            <td><strong>{{ row.count }}</strong></td>
-                            <td>{{ "%.1f"|format(row.pct) }}%</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-5">
-        <div class="card h-100">
-            <div class="card-header">About</div>
-            <div class="card-body">
-                <p class="small mb-2">Each problem includes a bioinformatics task prompt, a grading rubric, and a data zip file.</p>
-                <p class="small mb-0">Data files are stored in <code>data/&lt;id&gt;.zip</code> via Git LFS. Extract into the working directory before solving.</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0">Allowed Domains (shared by all problems)</h5></div>
-    <div class="card-body">
-        <div class="d-flex flex-wrap gap-2">
-            {% for d in bmb_allowed_domains %}
-            <span class="badge rounded-pill text-bg-light border">{{ d }}</span>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-{% endif %}
 
 {% else %}
 <h1 class="mb-4">BixBench Results Dashboard <span class="badge bg-primary dataset-pill">results</span></h1>
 
+{% if bixbench_results_missing %}
+<div class="alert alert-warning">
+    <strong>Baseline results not loaded.</strong> Aggregate metrics and charts require the
+    <code>BixBench/bixbench-v1.5_results/</code> and <code>BixBench/bixbench_results/</code> directories
+    at the repository root (one level above <code>explorer/</code>). On Render, include those files in the
+    deployed repo or copy them during the build step, then redeploy.
+    <a href="/questions" class="alert-link">Browse the 205-question catalog</a> (loaded from Hugging Face).
+</div>
+{% endif %}
+
+{% if not bixbench_results_missing %}
 <div class="row mb-4">
     <div class="col-md-6">
         <div class="card">
@@ -339,10 +287,11 @@
     </div>
 </div>
 {% endif %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
-{% if not is_compbiobench and not is_biomystery %}
+{% if not is_compbiobench and not bixbench_results_missing and v1_5_chart_data.labels %}
 <script>
     const v1_5_chartData = {{ v1_5_chart_data|tojson }};
     const original_chartData = {{ original_chart_data|tojson }};

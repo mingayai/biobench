@@ -54,56 +54,6 @@
     </div>
 </div>
 
-{% elif is_biomystery %}
-<div class="mb-3">
-    <a href="/questions?dataset=biomysterybench" class="btn btn-secondary">&larr; Back to problems</a>
-</div>
-
-<h1 class="mb-2"><code>{{ uuid }}</code></h1>
-<div class="d-flex flex-wrap gap-2 mb-4">
-    {% if bmb_human_solvable %}
-    <span class="badge text-bg-success fs-6">Human Solvable</span>
-    {% else %}
-    <span class="badge text-bg-warning text-dark fs-6">Not Human Solvable</span>
-    {% endif %}
-    {% if bmb_data_file %}<span class="badge text-bg-info">Has data files</span>{% endif %}
-</div>
-
-<div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0">Question</h5></div>
-    <div class="card-body">
-        <div class="cb-prompt">{{ question }}</div>
-    </div>
-</div>
-
-<div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0">Answer Rubric</h5></div>
-    <div class="card-body">
-        <div class="cb-prompt">{{ bmb_rubric }}</div>
-    </div>
-</div>
-
-<div class="card mb-4">
-    <div class="card-header"><h5 class="mb-0">Allowed Domains</h5></div>
-    <div class="card-body">
-        <div class="d-flex flex-wrap gap-2">
-            {% for d in bmb_domains %}
-            <span class="badge rounded-pill text-bg-light border">{{ d }}</span>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-{% if bmb_data_file %}
-<div class="card">
-    <div class="card-header"><h5 class="mb-0">Data Files</h5></div>
-    <div class="card-body">
-        <p class="mb-1"><code>{{ bmb_data_file }}</code></p>
-        <p class="small text-muted mb-0">Stored as Git LFS — run <code>git lfs pull</code> to fetch, then extract the zip into your working directory before solving.</p>
-    </div>
-</div>
-{% endif %}
-
 {% else %}
 <div class="mb-3">
     <a href="/questions" class="btn btn-secondary">&larr; Back to Questions</a>
