@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Capsules - BixBench Explorer{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Capsule Explorer</h1>
+
+<div class="alert alert-info">
+    <strong>Note:</strong> Capsules are sorted by overall accuracy (hardest first). Each capsule contains biological datasets and questions. Accuracy shown is for MCQ No-Refusal evaluation only.
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5>Capsules Overview</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Capsule ID</th>
+                        <th>Total Questions</th>
+                        <th>GPT-4o Accuracy</th>
+                        <th>Claude 3.5 Sonnet Accuracy</th>
+                        <th>Overall Accuracy</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for capsule in capsules %}
+                    <tr>
+                        <td><code>{{ capsule.id }}</code></td>
+                        <td>{{ capsule.total_questions }}</td>
+                        <td>
+                            <div class="progress" style="min-width: 100px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ capsule.gpt_accuracy }}%">
+                                    {{ "%.1f%%"|format(capsule.gpt_accuracy) }}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="progress" style="min-width: 100px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ capsule.claude_accuracy }}%">
+                                    {{ "%.1f%%"|format(capsule.claude_accuracy) }}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ "%.1f%%"|format(capsule.overall_accuracy) }}</strong>
+                        </td>
+                        <td>
+                            <a href="/capsules/{{ capsule.id }}" class="btn btn-sm btn-primary">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

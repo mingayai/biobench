@@ -1,0 +1,7 @@
+flask
+gunicorn
+pandas
+huggingface_hub
+datasets
+nbformat
+nbconvert

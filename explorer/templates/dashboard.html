@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — BioBench Explorer{% endblock %}
+
+{% block content %}
+<div class="card border-secondary mb-4">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-7">
+                <h2 class="h5 mb-1">Choose a dataset</h2>
+                <p class="text-muted small mb-0">
+                    <strong>BixBench</strong> shows evaluated model results and capsules.
+                    <strong>CompBioBench</strong> is the task catalog aligned with <code>compbiobench-runner</code>.
+                    <strong>BioMysteryBench</strong> has 99 bioinformatics research problems created by Anthropic.
+                </p>
+            </div>
+            <div class="col-md-5 text-md-end mt-3 mt-md-0">
+                <a href="/" class="btn {% if current_dataset == 'bixbench' %}btn-primary{% else %}btn-outline-primary{% endif %}">BixBench</a>
+                <a href="/?dataset=compbiobench" class="btn {% if current_dataset == 'compbiobench' %}btn-info{% else %}btn-outline-info{% endif %}">CompBioBench</a>
+                <a href="/?dataset=biomysterybench" class="btn {% if current_dataset == 'biomysterybench' %}btn-success{% else %}btn-outline-success{% endif %}">BioMysteryBench</a>
+                <a href="/questions{{ dataset_qs(True) }}" class="btn btn-secondary ms-1">Browse &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if is_compbiobench %}
+<h1 class="mb-4">CompBioBench <span class="badge bg-secondary dataset-pill">catalog</span></h1>
+
+{% if compbiobench_empty %}
+<div class="alert alert-warning">
+    No CompBioBench data loaded. Place <code>compbiobench.v1.tsv</code> next to <code>app.py</code> and restart the server.
+</div>
+{% else %}
+<p class="lead text-muted">Overview of <strong>{{ total_questions }}</strong> tasks in the v1 catalog.</p>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100 border-primary">
+            <div class="card-header bg-primary text-white">Totals</div>
+            <div class="card-body">
+                <p class="display-6 mb-0">{{ total_questions }}</p>
+                <span class="text-muted">questions</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header">Requirements</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th></th><th>Count</th><th>%</th></tr></thead>
+                    <tbody>
+                        {% for row in flag_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td><strong>{{ row.count }}</strong></td>
+                            <td>{{ "%.1f"|format(row.pct) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-6 mb-4 mb-lg-0">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">By domain</h5></div>
+            <div class="card-body p-0 table-responsive" style="max-height: 22rem;">
+                <table class="table table-sm table-striped mb-0">
+                    <thead><tr><th>Domain</th><th class="text-end">Count</th></tr></thead>
+                    <tbody>
+                        {% for r in domain_rows %}
+                        <tr>
+                            <td>{{ r.domain }}</td>
+                            <td class="text-end">{{ r.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">By question style</h5></div>
+            <div class="card-body p-0 table-responsive" style="max-height: 22rem;">
+                <table class="table table-sm table-striped mb-0">
+                    <thead><tr><th>Style</th><th class="text-end">Count</th></tr></thead>
+                    <tbody>
+                        {% for r in style_rows %}
+                        <tr>
+                            <td>{{ r.question_style }}</td>
+                            <td class="text-end">{{ r.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Top skills tested</h5></div>
+    <div class="card-body">
+        {% if top_skills %}
+        <div class="d-flex flex-wrap gap-2">
+            {% for s in top_skills %}
+            <span class="badge rounded-pill text-bg-light border">{{ s.skill }} <span class="text-muted">({{ s.count }})</span></span>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No skill tags found.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% elif is_biomystery %}
+<h1 class="mb-4">BioMysteryBench <span class="badge bg-success dataset-pill">problems</span></h1>
+
+{% if bmb_empty %}
+<div class="alert alert-warning">
+    No BioMysteryBench data loaded. Ensure <code>BioMysteryBench-full/problems.csv</code> exists and restart the server.
+</div>
+{% else %}
+<p class="lead text-muted">Overview of <strong>{{ bmb_total }}</strong> bioinformatics research problems created by Anthropic.</p>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card h-100 border-success">
+            <div class="card-header bg-success text-white">Total Problems</div>
+            <div class="card-body">
+                <p class="display-6 mb-0">{{ bmb_total }}</p>
+                <span class="text-muted">problems</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">Human Solvability</div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th></th><th>Count</th><th>%</th></tr></thead>
+                    <tbody>
+                        {% for row in bmb_human_solvable_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td><strong>{{ row.count }}</strong></td>
+                            <td>{{ "%.1f"|format(row.pct) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card h-100">
+            <div class="card-header">About</div>
+            <div class="card-body">
+                <p class="small mb-2">Each problem includes a bioinformatics task prompt, a grading rubric, and a data zip file.</p>
+                <p class="small mb-0">Data files are stored in <code>data/&lt;id&gt;.zip</code> via Git LFS. Extract into the working directory before solving.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Allowed Domains (shared by all problems)</h5></div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+            {% for d in bmb_allowed_domains %}
+            <span class="badge rounded-pill text-bg-light border">{{ d }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<h1 class="mb-4">BixBench Results Dashboard <span class="badge bg-primary dataset-pill">results</span></h1>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">v1.5 Results (205 Questions)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Configuration</th>
+                                <th>Accuracy</th>
+                                <th>Precision</th>
+                                <th>Coverage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for config, values in v1_5_metrics.items() %}
+                            <tr>
+                                <td style="font-size: 0.85em;">{{ config.replace('grader-', '').replace('-', ' ') }}</td>
+                                <td><strong>{{ "%.1f%%"|format(values.accuracy * 100) }}</strong></td>
+                                <td>{{ "%.1f%%"|format(values.precision * 100) }}</td>
+                                <td>{{ "%.1f%%"|format(values.coverage * 100) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Original v1.0 Results (296 Questions)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Configuration</th>
+                                <th>Accuracy</th>
+                                <th>Precision</th>
+                                <th>Coverage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for config, values in original_metrics.items() %}
+                            <tr>
+                                <td style="font-size: 0.85em;">{{ config.replace('grader-', '').replace('-', ' ') }}</td>
+                                <td><strong>{{ "%.1f%%"|format(values.accuracy * 100) }}</strong></td>
+                                <td>{{ "%.1f%%"|format(values.precision * 100) }}</td>
+                                <td>{{ "%.1f%%"|format(values.coverage * 100) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>v1.5 Accuracy by Configuration</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="v1_5_accuracyChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Original v1.0 Accuracy by Configuration</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="original_accuracyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>v1.5 Coverage vs Precision</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="v1_5_coverageChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Original v1.0 Coverage vs Precision</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="original_coverageChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>v1.5 Accuracy by Verifier Type (MCQ No-Refusal)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Verifier Type</th>
+                                <th>Questions</th>
+                                <th>Overall Accuracy</th>
+                                <th>GPT-4o Accuracy</th>
+                                <th>Claude Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in eval_mode_stats %}
+                            <tr>
+                                <td><strong>{{ stat.mode }}</strong></td>
+                                <td>{{ stat.total_questions }}</td>
+                                <td>{{ "%.1f%%"|format(stat.overall_accuracy) }}</td>
+                                <td>{{ "%.1f%%"|format(stat.gpt_accuracy) }}</td>
+                                <td>{{ "%.1f%%"|format(stat.claude_accuracy) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="alert alert-info">
+            <strong>Random Baselines:</strong>
+            <ul>
+                <li>MCQ No-Refusal: 25% (1 in 4 choices)</li>
+                <li>MCQ With-Refusal: 20% (1 in 5 choices including "unsure")</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not is_compbiobench and not is_biomystery %}
+<script>
+    const v1_5_chartData = {{ v1_5_chart_data|tojson }};
+    const original_chartData = {{ original_chart_data|tojson }};
+
+    const v1_5_accuracyCtx = document.getElementById('v1_5_accuracyChart').getContext('2d');
+    new Chart(v1_5_accuracyCtx, {
+        type: 'bar',
+        data: {
+            labels: v1_5_chartData.labels,
+            datasets: [{
+                label: 'Accuracy (%)',
+                data: v1_5_chartData.accuracy,
+                backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }, {
+                label: 'MCQ No-Refusal Baseline (25%)',
+                data: Array(v1_5_chartData.labels.length).fill(25),
+                type: 'line',
+                borderColor: 'rgba(255, 99, 132, 0.8)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'MCQ With-Refusal Baseline (20%)',
+                data: Array(v1_5_chartData.labels.length).fill(20),
+                type: 'line',
+                borderColor: 'rgba(255, 159, 64, 0.8)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Accuracy (%)' } }
+            }
+        }
+    });
+
+    const original_accuracyCtx = document.getElementById('original_accuracyChart').getContext('2d');
+    new Chart(original_accuracyCtx, {
+        type: 'bar',
+        data: {
+            labels: original_chartData.labels,
+            datasets: [{
+                label: 'Accuracy (%)',
+                data: original_chartData.accuracy,
+                backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }, {
+                label: 'MCQ No-Refusal Baseline (25%)',
+                data: Array(original_chartData.labels.length).fill(25),
+                type: 'line',
+                borderColor: 'rgba(255, 99, 132, 0.8)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            }, {
+                label: 'MCQ With-Refusal Baseline (20%)',
+                data: Array(original_chartData.labels.length).fill(20),
+                type: 'line',
+                borderColor: 'rgba(255, 159, 64, 0.8)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false,
+                pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Accuracy (%)' } }
+            }
+        }
+    });
+
+    const v1_5_coverageCtx = document.getElementById('v1_5_coverageChart').getContext('2d');
+    new Chart(v1_5_coverageCtx, {
+        type: 'bar',
+        data: {
+            labels: v1_5_chartData.labels,
+            datasets: [{
+                label: 'Coverage (%)',
+                data: v1_5_chartData.coverage,
+                backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }, {
+                label: 'Precision (%)',
+                data: v1_5_chartData.precision,
+                backgroundColor: 'rgba(255, 99, 132, 0.8)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Percentage (%)' } }
+            }
+        }
+    });
+
+    const original_coverageCtx = document.getElementById('original_coverageChart').getContext('2d');
+    new Chart(original_coverageCtx, {
+        type: 'bar',
+        data: {
+            labels: original_chartData.labels,
+            datasets: [{
+                label: 'Coverage (%)',
+                data: original_chartData.coverage,
+                backgroundColor: 'rgba(153, 102, 255, 0.8)',
+                borderColor: 'rgba(153, 102, 255, 1)',
+                borderWidth: 1
+            }, {
+                label: 'Precision (%)',
+                data: original_chartData.precision,
+                backgroundColor: 'rgba(255, 206, 86, 0.8)',
+                borderColor: 'rgba(255, 206, 86, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Percentage (%)' } }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

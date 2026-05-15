@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+
+{% block title %}Questions — BioBench Explorer{% endblock %}
+
+{% block content %}
+{% if is_compbiobench %}
+<h1 class="mb-2">CompBioBench tasks</h1>
+<p class="text-muted mb-4">Browse the v1 catalog. Task text is the full spec; <code>file_paths</code> are artifact names for the runner workspace (see <code>compbiobench-runner</code>).</p>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Search &amp; filters</h5></div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <input type="hidden" name="dataset" value="compbiobench">
+            <div class="col-md-4">
+                <label for="search" class="form-label">Search</label>
+                <input type="text" class="form-control" name="search" id="search" placeholder="ID, prompt, skills…" value="{{ filters.search or '' }}">
+            </div>
+            <div class="col-md-2">
+                <label for="domain" class="form-label">Domain</label>
+                <select name="domain" id="domain" class="form-select">
+                    <option value="">All</option>
+                    {% for d in domains %}
+                    <option value="{{ d }}" {% if filters.domain == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cb_style" class="form-label">Style</label>
+                <select name="cb_style" id="cb_style" class="form-select">
+                    <option value="">All</option>
+                    {% for st in styles %}
+                    <option value="{{ st }}" {% if filters.cb_style == st %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="skill" class="form-label">Skill contains</label>
+                <select name="skill" id="skill" class="form-select">
+                    <option value="">Any</option>
+                    {% for sk in skills_options %}
+                    <option value="{{ sk }}" {% if filters.skill == sk %}selected{% endif %}>{{ sk }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label for="internet_required" class="form-label">Web</label>
+                <select name="internet_required" id="internet_required" class="form-select">
+                    <option value="">All</option>
+                    <option value="true" {% if filters.internet_required == 'true' %}selected{% endif %}>Yes</option>
+                    <option value="false" {% if filters.internet_required == 'false' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label for="gpu_preferred" class="form-label">GPU</label>
+                <select name="gpu_preferred" id="gpu_preferred" class="form-select">
+                    <option value="">All</option>
+                    <option value="true" {% if filters.gpu_preferred == 'true' %}selected{% endif %}>Yes</option>
+                    <option value="false" {% if filters.gpu_preferred == 'false' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <a href="/questions?dataset=compbiobench" class="btn btn-secondary">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0">Tasks (page {{ page }} of {{ total_pages }})</h5>
+        <span class="badge bg-secondary">Showing {{ questions|length }} of {{ total }}</span>
+    </div>
+    <div class="card-body">
+        {% if questions %}
+        <div class="row g-3">
+            {% for q in questions %}
+            <div class="col-12">
+                <div class="card border shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                            <div>
+                                <code class="fs-6">{{ q.question_id }}</code>
+                                <span class="text-muted ms-2 small">{{ q.domain }} · {{ q.question_style }}</span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% if q.internet_required %}<span class="badge text-bg-warning">Web</span>{% endif %}
+                                {% if q.gpu_preferred %}<span class="badge text-bg-dark">GPU</span>{% endif %}
+                                <span class="badge text-bg-light border">{{ q.artifact_count }} file{% if q.artifact_count != 1 %}s{% endif %}</span>
+                            </div>
+                        </div>
+                        {% if q.skills_list %}
+                        <div class="mb-2">
+                            {% for sk in q.skills_list %}
+                            <span class="badge rounded-pill bg-body-secondary border me-1 mb-1">{{ sk }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <p class="mb-2 small text-body-secondary cb-prompt">{{ q.question_excerpt }}</p>
+                        {% if q.artifacts_preview %}
+                        <p class="small mb-2"><strong>Artifacts:</strong> <code>{{ q.artifacts_preview }}</code></p>
+                        {% endif %}
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <span class="small text-muted">Curator: {{ q.curator_name or '—' }}</span>
+                            <a href="/questions/{{ q.question_id }}{{ dataset_qs(True) }}" class="btn btn-sm btn-primary">Open task</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No tasks match your filters.</p>
+        {% endif %}
+
+        {% if total_pages > 1 %}
+        <nav class="mt-4" aria-label="Page navigation">
+            <ul class="pagination">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="?dataset=compbiobench&page={{ page - 1 }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.domain %}&domain={{ filters.domain|urlencode }}{% endif %}{% if filters.cb_style %}&cb_style={{ filters.cb_style|urlencode }}{% endif %}{% if filters.skill %}&skill={{ filters.skill|urlencode }}{% endif %}{% if filters.internet_required %}&internet_required={{ filters.internet_required }}{% endif %}{% if filters.gpu_preferred %}&gpu_preferred={{ filters.gpu_preferred }}{% endif %}">Previous</a>
+                </li>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                    <li class="page-item">
+                        <a class="page-link" href="?dataset=compbiobench&page={{ p }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.domain %}&domain={{ filters.domain|urlencode }}{% endif %}{% if filters.cb_style %}&cb_style={{ filters.cb_style|urlencode }}{% endif %}{% if filters.skill %}&skill={{ filters.skill|urlencode }}{% endif %}{% if filters.internet_required %}&internet_required={{ filters.internet_required }}{% endif %}{% if filters.gpu_preferred %}&gpu_preferred={{ filters.gpu_preferred }}{% endif %}">{{ p }}</a>
+                    </li>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="?dataset=compbiobench&page={{ page + 1 }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.domain %}&domain={{ filters.domain|urlencode }}{% endif %}{% if filters.cb_style %}&cb_style={{ filters.cb_style|urlencode }}{% endif %}{% if filters.skill %}&skill={{ filters.skill|urlencode }}{% endif %}{% if filters.internet_required %}&internet_required={{ filters.internet_required }}{% endif %}{% if filters.gpu_preferred %}&gpu_preferred={{ filters.gpu_preferred }}{% endif %}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+{% elif is_biomystery %}
+<h1 class="mb-2">BioMysteryBench problems</h1>
+<p class="text-muted mb-4">Browse 99 bioinformatics research problems. Each includes a task prompt, grading rubric, and data files.</p>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Search &amp; filters</h5></div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <input type="hidden" name="dataset" value="biomysterybench">
+            <div class="col-md-6">
+                <label for="search" class="form-label">Search</label>
+                <input type="text" class="form-control" name="search" id="search" placeholder="Problem ID, question text, rubric…" value="{{ filters.search or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="human_solvable" class="form-label">Human solvable</label>
+                <select name="human_solvable" id="human_solvable" class="form-select">
+                    <option value="">All</option>
+                    <option value="yes" {% if filters.human_solvable == 'yes' %}selected{% endif %}>Yes</option>
+                    <option value="no" {% if filters.human_solvable == 'no' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-success">Apply</button>
+                <a href="/questions?dataset=biomysterybench" class="btn btn-secondary">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0">Problems (page {{ page }} of {{ total_pages }})</h5>
+        <span class="badge bg-secondary">Showing {{ questions|length }} of {{ total }}</span>
+    </div>
+    <div class="card-body">
+        {% if questions %}
+        <div class="row g-3">
+            {% for q in questions %}
+            <div class="col-12">
+                <div class="card border shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                            <code class="fs-6">{{ q.id }}</code>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% if q.human_solvable %}
+                                <span class="badge text-bg-success">Human Solvable</span>
+                                {% else %}
+                                <span class="badge text-bg-warning text-dark">Not Human Solvable</span>
+                                {% endif %}
+                                {% if q.has_data %}<span class="badge text-bg-light border">Has data files</span>{% endif %}
+                            </div>
+                        </div>
+                        <p class="mb-2 small text-body-secondary cb-prompt">{{ q.question_excerpt }}{% if q.question|length > 200 %}…{% endif %}</p>
+                        <div class="text-end">
+                            <a href="/questions/{{ q.id }}?dataset=biomysterybench" class="btn btn-sm btn-success">Open problem</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No problems match your filters.</p>
+        {% endif %}
+
+        {% if total_pages > 1 %}
+        <nav class="mt-4" aria-label="Page navigation">
+            <ul class="pagination">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="?dataset=biomysterybench&page={{ page - 1 }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.human_solvable %}&human_solvable={{ filters.human_solvable }}{% endif %}">Previous</a>
+                </li>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                    <li class="page-item">
+                        <a class="page-link" href="?dataset=biomysterybench&page={{ p }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.human_solvable %}&human_solvable={{ filters.human_solvable }}{% endif %}">{{ p }}</a>
+                    </li>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="?dataset=biomysterybench&page={{ page + 1 }}{% if filters.search %}&search={{ filters.search|urlencode }}{% endif %}{% if filters.human_solvable %}&human_solvable={{ filters.human_solvable }}{% endif %}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+{% else %}
+<h1 class="mb-4">Question Explorer</h1>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Filters</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="capsule" class="form-label">Capsule</label>
+                <select name="capsule" id="capsule" class="form-select">
+                    <option value="">All Capsules</option>
+                    {% for cap in capsules %}
+                    <option value="{{ cap }}" {% if filters.capsule == cap %}selected{% endif %}>{{ cap }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="eval_type" class="form-label">Eval Type</label>
+                <select name="eval_type" id="eval_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for et in eval_types %}
+                    <option value="{{ et }}" {% if filters.eval_type == et %}selected{% endif %}>{{ et }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="eval_mode" class="form-label">Verifier</label>
+                <select name="eval_mode" id="eval_mode" class="form-select">
+                    <option value="">All Verifiers</option>
+                    {% for mode in eval_modes %}
+                    <option value="{{ mode }}" {% if filters.eval_mode == mode %}selected{% endif %}>{{ mode }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="model" class="form-label">Model</label>
+                <select name="model" id="model" class="form-select">
+                    <option value="">All Models</option>
+                    {% for m in models %}
+                    <option value="{{ m }}" {% if filters.model == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="correct" class="form-label">Correctness</label>
+                <select name="correct" id="correct" class="form-select">
+                    <option value="">All</option>
+                    <option value="true" {% if filters.correct == 'true' %}selected{% endif %}>Correct Only</option>
+                    <option value="false" {% if filters.correct == 'false' %}selected{% endif %}>Incorrect Only</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+                <a href="/questions" class="btn btn-secondary">Clear Filters</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Questions (Page {{ page }} of {{ total_pages }})</h5>
+        <span class="badge bg-secondary">Showing {{ questions|length }} of {{ total }} questions</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">UUID</th>
+                        <th style="width: 5%;">Capsule</th>
+                        <th style="width: 30%;">Hypothesis</th>
+                        <th style="width: 7%;">Hyp. Answer</th>
+                        <th style="width: 12%;">Ideal</th>
+                        <th style="width: 8%;">MCQ Answer</th>
+                        <th style="width: 8%;">GPT-4o</th>
+                        <th style="width: 8%;">Claude</th>
+                        <th style="width: 12%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in questions %}
+                    <tr>
+                        <td><code style="font-size: 0.85em;">{{ q.uuid }}</code></td>
+                        <td><a href="/capsules/{{ q.capsule_id }}" class="btn btn-sm btn-outline-secondary">{{ q.capsule_id }}</a></td>
+                        <td>
+                            {% if q.hypothesis %}
+                            {{ q.hypothesis[:100] }}{% if q.hypothesis|length > 100 %}...{% endif %}
+                            {% else %}
+                            <em>{{ q.question[:100] }}{% if q.question|length > 100 %}...{% endif %}</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if q.answer is not none %}
+                                {% if q.answer %}
+                                <span class="badge bg-success">True</span>
+                                {% else %}
+                                <span class="badge bg-danger">False</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if q.ideal %}
+                            <code style="font-size: 0.85em;">{{ q.ideal[:50] }}{% if q.ideal|length > 50 %}...{% endif %}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-info">{{ q.target }}</span></td>
+                        <td>
+                            {% if q.gpt_correct is not none %}
+                                {% if q.gpt_correct %}
+                                <span class="badge correct">✓</span>
+                                {% else %}
+                                <span class="badge incorrect">✗</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if q.claude_correct is not none %}
+                                {% if q.claude_correct %}
+                                <span class="badge correct">✓</span>
+                                {% else %}
+                                <span class="badge incorrect">✗</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/questions/{{ q.uuid }}" class="btn btn-sm btn-primary">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <nav aria-label="Page navigation">
+            <ul class="pagination">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page - 1 }}{% if filters.capsule %}&capsule={{ filters.capsule }}{% endif %}{% if filters.eval_type %}&eval_type={{ filters.eval_type }}{% endif %}{% if filters.eval_mode %}&eval_mode={{ filters.eval_mode }}{% endif %}{% if filters.model %}&model={{ filters.model }}{% endif %}{% if filters.correct %}&correct={{ filters.correct }}{% endif %}">Previous</a>
+                </li>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ p }}{% if filters.capsule %}&capsule={{ filters.capsule }}{% endif %}{% if filters.eval_type %}&eval_type={{ filters.eval_type }}{% endif %}{% if filters.eval_mode %}&eval_mode={{ filters.eval_mode }}{% endif %}{% if filters.model %}&model={{ filters.model }}{% endif %}{% if filters.correct %}&correct={{ filters.correct }}{% endif %}">{{ p }}</a>
+                    </li>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page + 1 }}{% if filters.capsule %}&capsule={{ filters.capsule }}{% endif %}{% if filters.eval_type %}&eval_type={{ filters.eval_type }}{% endif %}{% if filters.eval_mode %}&eval_mode={{ filters.eval_mode }}{% endif %}{% if filters.model %}&model={{ filters.model }}{% endif %}{% if filters.correct %}&correct={{ filters.correct }}{% endif %}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

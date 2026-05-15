@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Model Comparison - BixBench Explorer{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Model Comparison: GPT-4o vs Claude 3.5 Sonnet</h1>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h6 class="card-title">Both Correct</h6>
+                <h3>{{ counts.both_correct }}</h3>
+                <p class="mb-0">{{ "%.1f%%"|format(percentages.both_correct) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <h6 class="card-title">Both Wrong</h6>
+                <h3>{{ counts.both_wrong }}</h3>
+                <p class="mb-0">{{ "%.1f%%"|format(percentages.both_wrong) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h6 class="card-title">Only GPT-4o Correct</h6>
+                <h3>{{ counts.gpt_only }}</h3>
+                <p class="mb-0">{{ "%.1f%%"|format(percentages.gpt_only) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body">
+                <h6 class="card-title">Only Claude Correct</h6>
+                <h3>{{ counts.claude_only }}</h3>
+                <p class="mb-0">{{ "%.1f%%"|format(percentages.claude_only) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Filter by Category</h5>
+    </div>
+    <div class="card-body">
+        <div class="btn-group" role="group">
+            <a href="/compare" class="btn {% if not filter_cat %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+            <a href="/compare?category=both_correct" class="btn {% if filter_cat == 'both_correct' %}btn-success{% else %}btn-outline-success{% endif %}">Both Correct</a>
+            <a href="/compare?category=both_wrong" class="btn {% if filter_cat == 'both_wrong' %}btn-danger{% else %}btn-outline-danger{% endif %}">Both Wrong</a>
+            <a href="/compare?category=gpt_only" class="btn {% if filter_cat == 'gpt_only' %}btn-info{% else %}btn-outline-info{% endif %}">GPT-4o Only</a>
+            <a href="/compare?category=claude_only" class="btn {% if filter_cat == 'claude_only' %}btn-warning{% else %}btn-outline-warning{% endif %}">Claude Only</a>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Question Comparisons{% if page and total_pages > 1 %} (Page {{ page }} of {{ total_pages }}){% endif %}</h5>
+        <span class="badge bg-secondary">Showing {{ comparisons|length }} of {{ total_filtered }} questions</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>UUID</th>
+                        <th>Question</th>
+                        <th>Target</th>
+                        <th>GPT-4o Predicted</th>
+                        <th>Claude Predicted</th>
+                        <th>Category</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for comp in comparisons %}
+                    <tr>
+                        <td><code>{{ comp.uuid }}</code></td>
+                        <td class="question-truncate">{{ comp.question }}</td>
+                        <td><strong>{{ comp.target }}</strong></td>
+                        <td>
+                            {% if comp.gpt_predicted == comp.target %}
+                            <span class="badge correct">{{ comp.gpt_predicted }}</span>
+                            {% else %}
+                            <span class="badge incorrect">{{ comp.gpt_predicted }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if comp.claude_predicted == comp.target %}
+                            <span class="badge correct">{{ comp.claude_predicted }}</span>
+                            {% else %}
+                            <span class="badge incorrect">{{ comp.claude_predicted }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if comp.category == 'both_correct' %}
+                            <span class="badge bg-success">Both Correct</span>
+                            {% elif comp.category == 'both_wrong' %}
+                            <span class="badge bg-danger">Both Wrong</span>
+                            {% elif comp.category == 'gpt_only' %}
+                            <span class="badge bg-info">GPT-4o Only</span>
+                            {% else %}
+                            <span class="badge bg-warning">Claude Only</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/questions/{{ comp.uuid }}" class="btn btn-sm btn-primary">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <nav aria-label="Page navigation">
+            <ul class="pagination">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page - 1 }}{% if filter_cat %}&category={{ filter_cat }}{% endif %}">Previous</a>
+                </li>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ p }}{% if filter_cat %}&category={{ filter_cat }}{% endif %}">{{ p }}</a>
+                    </li>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page + 1 }}{% if filter_cat %}&category={{ filter_cat }}{% endif %}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

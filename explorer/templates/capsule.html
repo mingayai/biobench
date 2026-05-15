@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Capsule {{ capsule_id }} - BixBench Explorer{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="/capsules" class="btn btn-secondary">&larr; Back to Capsules</a>
+</div>
+
+<h1 class="mb-4">Capsule: <code>{{ capsule_id }}</code></h1>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Total Questions</h6>
+                <h3>{{ stats.total_questions }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">GPT-4o Accuracy</h6>
+                <h3>{{ "%.1f%%"|format(stats.gpt_accuracy) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Claude 3.5 Accuracy</h6>
+                <h3>{{ "%.1f%%"|format(stats.claude_accuracy) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Overall Accuracy</h6>
+                <h3>{{ "%.1f%%"|format(stats.overall_accuracy) }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Questions in this Capsule</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>UUID</th>
+                        <th>Question</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in questions %}
+                    <tr>
+                        <td><code>{{ q.uuid }}</code></td>
+                        <td class="question-truncate">{{ q.question[:100] }}...</td>
+                        <td>
+                            <a href="/questions/{{ q.uuid }}" class="btn btn-sm btn-primary">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Capsule Data</h5>
+    </div>
+    <div class="card-body">
+        {% if not data_loaded %}
+        <div class="alert alert-info">
+            <p><strong>Load Capsule Data:</strong> Download and extract the capsule data files and notebook from HuggingFace.</p>
+            <button id="loadDataBtn" class="btn btn-primary">
+                <i class="bi bi-download"></i> Load Capsule Data
+            </button>
+            <div id="loadingSpinner" class="spinner-border text-primary mt-2" role="status" style="display: none;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div id="loadingStatus" class="mt-2"></div>
+        </div>
+        {% else %}
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle"></i> Capsule data loaded successfully.
+        </div>
+        <div class="mb-3">
+            <button id="loadNotebookBtn" class="btn btn-primary" {% if not has_notebook %}disabled{% endif %}>
+                <i class="bi bi-journal-code"></i> View Notebook
+            </button>
+            <span class="text-muted ms-2" id="notebookStatus">
+                {% if has_notebook %}
+                Click to view the capsule's Jupyter notebook
+                {% else %}
+                No notebook available for this capsule
+                {% endif %}
+            </span>
+        </div>
+        {% endif %}
+
+        <div id="contentArea" {% if not data_loaded %}style="display: none;"{% endif %}>
+            <!-- Notebook display area -->
+            <div id="notebookContainer" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Notebook: <span id="notebookName"></span></h5>
+                    <button id="hideNotebookBtn" class="btn btn-sm btn-secondary">
+                        <i class="bi bi-x"></i> Hide Notebook
+                    </button>
+                </div>
+                <div id="notebookContent" class="border rounded p-3 bg-light" style="max-height: 800px; overflow-y: auto;">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading notebook...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File list area -->
+            <div id="fileListArea" {% if data_loaded %}{% else %}style="display: none;"{% endif %}>
+                <h5 class="mt-4 mb-3">Data Files ({{ file_list|length }} files)</h5>
+                <div class="list-group" id="fileListContainer">
+                    {% for file in file_list %}
+                    <a href="#" class="list-group-item list-group-item-action file-item" data-path="{{ file.path }}">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1"><i class="bi bi-file-earmark"></i> {{ file.name }}</h6>
+                            <small>{{ "%.1f KB"|format(file.size / 1024) }}</small>
+                        </div>
+                        <small class="text-muted">{{ file.path }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const capsuleId = "{{ capsule_id }}";
+    let dataLoaded = {{ data_loaded|tojson }};
+    let hasNotebook = {{ has_notebook|tojson }};
+
+    {% if not data_loaded %}
+    document.getElementById('loadDataBtn').addEventListener('click', function() {
+        const btn = this;
+        const spinner = document.getElementById('loadingSpinner');
+        const status = document.getElementById('loadingStatus');
+        const contentArea = document.getElementById('contentArea');
+
+        btn.disabled = true;
+        spinner.style.display = 'inline-block';
+        status.textContent = 'Downloading capsule data from HuggingFace...';
+
+        fetch(`/api/capsule/${capsuleId}/load`)
+            .then(response => {
+                if (!response.ok && response.status === 404) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Capsule data not found');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    status.innerHTML = '<div class="alert alert-success mt-2">Data loaded successfully! Reloading page...</div>';
+                    spinner.style.display = 'none';
+                    
+                    // Reload the page to show the loaded data
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    status.innerHTML = `<div class="alert alert-danger mt-2">${data.error || 'Unknown error occurred'}</div>`;
+                    btn.disabled = false;
+                    spinner.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                status.innerHTML = `<div class="alert alert-warning mt-2"><strong>Error:</strong> ${error.message || error}</div>`;
+                spinner.style.display = 'none';
+                btn.disabled = false;
+            });
+    });
+    {% endif %}
+
+    {% if data_loaded %}
+    // Load notebook handler
+    const loadNotebookBtn = document.getElementById('loadNotebookBtn');
+    if (loadNotebookBtn && hasNotebook) {
+        loadNotebookBtn.addEventListener('click', function() {
+            const notebookContainer = document.getElementById('notebookContainer');
+            const notebookContent = document.getElementById('notebookContent');
+            const fileListArea = document.getElementById('fileListArea');
+            
+            notebookContainer.style.display = 'block';
+            fileListArea.style.display = 'none';
+            
+            // Load notebook content
+            fetch(`/api/capsule/${capsuleId}/notebook`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('notebookName').textContent = data.notebook_name;
+                        notebookContent.innerHTML = data.html;
+                    } else {
+                        notebookContent.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                    }
+                })
+                .catch(error => {
+                    notebookContent.innerHTML = `<div class="alert alert-danger">Error loading notebook: ${error.message}</div>`;
+                });
+        });
+    }
+
+    // Hide notebook handler
+    const hideNotebookBtn = document.getElementById('hideNotebookBtn');
+    if (hideNotebookBtn) {
+        hideNotebookBtn.addEventListener('click', function() {
+            document.getElementById('notebookContainer').style.display = 'none';
+            document.getElementById('fileListArea').style.display = 'block';
+        });
+    }
+
+    // File click handlers (kept for reference but minimal usage for now)
+    function setupFileClickHandlers() {
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                alert('File preview coming soon. For now, focus on viewing the notebook above.');
+            });
+        });
+    }
+
+    setupFileClickHandlers();
+    {% endif %}
+</script>
+{% endblock %}

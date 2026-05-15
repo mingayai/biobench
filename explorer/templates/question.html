@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Question {{ uuid }} — BioBench Explorer{% endblock %}
+
+{% block content %}
+{% if is_compbiobench %}
+<div class="mb-3">
+    <a href="/questions{{ dataset_qs(True) }}" class="btn btn-secondary">&larr; Back to tasks</a>
+</div>
+
+<h1 class="mb-2"><code>{{ uuid }}</code></h1>
+<p class="text-muted mb-4">
+    {% if cb_domain %}<span class="me-2"><strong>Domain:</strong> {{ cb_domain }}</span>{% endif %}
+    {% if cb_style %}<span class="me-2"><strong>Style:</strong> {{ cb_style }}</span>{% endif %}
+    {% if cb_curator %}<span><strong>Curator:</strong> {{ cb_curator }}</span>{% endif %}
+</p>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+    {% if cb_internet %}<span class="badge text-bg-warning">Internet / APIs expected</span>{% else %}<span class="badge text-bg-secondary">Offline-friendly</span>{% endif %}
+    {% if cb_gpu %}<span class="badge text-bg-dark">GPU preferred</span>{% endif %}
+</div>
+
+{% if cb_skills %}
+<div class="mb-4">
+    <h5 class="h6 text-uppercase text-muted">Skills tested</h5>
+    <div class="d-flex flex-wrap gap-1">
+        {% for sk in cb_skills %}
+        <span class="badge rounded-pill bg-body-secondary border">{{ sk }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Task specification</h5></div>
+    <div class="card-body">
+        <div class="cb-prompt">{{ question }}</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Artifacts (<code>file_paths</code>)</h5></div>
+    <div class="card-body">
+        {% if cb_artifacts %}
+        <ul class="list-group list-group-flush">
+            {% for fn in cb_artifacts %}
+            <li class="list-group-item"><code>{{ fn }}</code></li>
+            {% endfor %}
+        </ul>
+        <p class="small text-muted mt-3 mb-0">These names are copied into the runner workspace; use real paths in your input CSV when executing <code>run_benchmark.py</code>.</p>
+        {% else %}
+        <p class="text-muted mb-0">No bundled files — task may be web- or API-only.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% elif is_biomystery %}
+<div class="mb-3">
+    <a href="/questions?dataset=biomysterybench" class="btn btn-secondary">&larr; Back to problems</a>
+</div>
+
+<h1 class="mb-2"><code>{{ uuid }}</code></h1>
+<div class="d-flex flex-wrap gap-2 mb-4">
+    {% if bmb_human_solvable %}
+    <span class="badge text-bg-success fs-6">Human Solvable</span>
+    {% else %}
+    <span class="badge text-bg-warning text-dark fs-6">Not Human Solvable</span>
+    {% endif %}
+    {% if bmb_data_file %}<span class="badge text-bg-info">Has data files</span>{% endif %}
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Question</h5></div>
+    <div class="card-body">
+        <div class="cb-prompt">{{ question }}</div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Answer Rubric</h5></div>
+    <div class="card-body">
+        <div class="cb-prompt">{{ bmb_rubric }}</div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Allowed Domains</h5></div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+            {% for d in bmb_domains %}
+            <span class="badge rounded-pill text-bg-light border">{{ d }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if bmb_data_file %}
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Data Files</h5></div>
+    <div class="card-body">
+        <p class="mb-1"><code>{{ bmb_data_file }}</code></p>
+        <p class="small text-muted mb-0">Stored as Git LFS — run <code>git lfs pull</code> to fetch, then extract the zip into your working directory before solving.</p>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="mb-3">
+    <a href="/questions" class="btn btn-secondary">&larr; Back to Questions</a>
+    {% if capsule_id %}
+    <a href="/capsules/{{ capsule_id }}" class="btn btn-outline-primary">View Capsule Data &rarr;</a>
+    {% endif %}
+</div>
+
+<h1 class="mb-4">Question Details</h1>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Question: <code>{{ uuid }}</code></h5>
+    </div>
+    <div class="card-body">
+        <p class="lead">{{ question }}</p>
+        <hr>
+        <p><strong>Correct Answer (MCQ):</strong> <span class="badge bg-success">{{ target }}</span></p>
+        {% if ideal %}
+        <p><strong>Ideal Answer:</strong> <code>{{ ideal }}</code></p>
+        {% endif %}
+    </div>
+</div>
+
+{% if hypothesis %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Hypothesis</h5>
+    </div>
+    <div class="card-body">
+        <p>{{ hypothesis }}</p>
+        {% if result %}
+        <hr>
+        <p><strong>Expected Result:</strong></p>
+        <p>{{ result }}</p>
+        {% endif %}
+        {% if answer is not none %}
+        <p><strong>Hypothesis Answer:</strong> <span class="badge {% if answer %}bg-success{% else %}bg-danger{% endif %}">{{ 'True' if answer else 'False' }}</span></p>
+        {% endif %}
+        {% if paper %}
+        <p><strong>Paper:</strong> <a href="{{ paper }}" target="_blank">{{ paper }}</a></p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if ideal or distractors %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Answer Choices</h5>
+    </div>
+    <div class="card-body">
+        <ul class="list-group">
+            {% if ideal %}
+            <li class="list-group-item list-group-item-success">
+                <strong>✓ Ideal Answer:</strong> {{ ideal }}
+            </li>
+            {% endif %}
+            {% if distractors %}
+                {% for distractor in distractors %}
+                <li class="list-group-item">
+                    <strong>Distractor:</strong> {{ distractor }}
+                </li>
+                {% endfor %}
+            {% endif %}
+        </ul>
+    </div>
+</div>
+{% elif choices %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Answer Choices</h5>
+    </div>
+    <div class="card-body">
+        <ul class="list-group">
+            {% for choice in choices %}
+            <li class="list-group-item">{{ choice }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <h5>Model Predictions Across Configurations</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>Eval Type</th>
+                        <th>Evaluation Mode</th>
+                        <th>Predicted</th>
+                        <th>Grade</th>
+                        <th>Correct</th>
+                        <th>Sure</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for config in configs %}
+                    <tr>
+                        <td><strong>{{ config.model }}</strong></td>
+                        <td><span class="badge bg-info">{{ config.eval_type }}</span></td>
+                        <td><span class="badge bg-secondary">{{ config.evaluation_mode }}</span></td>
+                        <td><strong>{{ config.predicted }}</strong></td>
+                        <td>{{ config.grade }}</td>
+                        <td>
+                            {% if config.correct %}
+                            <span class="badge correct">✓ Correct</span>
+                            {% else %}
+                            <span class="badge incorrect">✗ Incorrect</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if config.sure %}
+                            <span class="badge bg-primary">Sure</span>
+                            {% else %}
+                            <span class="badge bg-warning">Unsure</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
