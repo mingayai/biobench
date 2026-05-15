@@ -80,7 +80,7 @@ def load_data():
         # `huggingface_hub` / `datasets` read HF_TOKEN; Render often sets HUGGING_FACE_HUB_TOKEN only.
         os.environ['HF_TOKEN'] = hf_token
 
-    base_path = Path(__file__).parent.parent / 'BixBench'
+    base_path = Path(__file__).parent / 'BixBench'
 
     # Load v1.5 CSVs
     v1_5_path = base_path / 'bixbench-v1.5_results' / 'zero_shot_baselines'

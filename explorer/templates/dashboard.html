@@ -125,9 +125,9 @@
 {% if bixbench_results_missing %}
 <div class="alert alert-warning">
     <strong>Baseline results not loaded.</strong> Aggregate metrics and charts require the
-    <code>BixBench/bixbench-v1.5_results/</code> and <code>BixBench/bixbench_results/</code> directories
-    at the repository root (one level above <code>explorer/</code>). On Render, include those files in the
-    deployed repo or copy them during the build step, then redeploy.
+    <code>explorer/BixBench/bixbench-v1.5_results/</code> and <code>explorer/BixBench/bixbench_results/</code>
+    next to <code>app.py</code>. On Render, include the <code>BixBench/</code> directory in your deploy root
+    (<code>explorer</code>) and redeploy.
     <a href="/questions" class="alert-link">Browse the 205-question catalog</a> (loaded from Hugging Face).
 </div>
 {% endif %}

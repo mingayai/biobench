@@ -120,7 +120,7 @@ Optional environment variables:
 
 ## Data Sources
 
-The app automatically loads:
+The app automatically loads (paths relative to `explorer/`):
 - v1.5 results: `BixBench/bixbench-v1.5_results/zero_shot_baselines/*.csv`
 - Original results: `BixBench/bixbench_results/baseline_eval_data/*.csv`
 - Capsule data: Downloaded on-demand from HuggingFace (`futurehouse/bixbench`)
@@ -129,6 +129,7 @@ The app automatically loads:
 
 ```
 explorer/
+├── BixBench/           # Baseline CSVs/JSON (v1.5 + original results)
 ├── app.py              # Flask application
 ├── templates/
 │   ├── base.html       # Base template
