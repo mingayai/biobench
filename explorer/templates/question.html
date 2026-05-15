@@ -103,29 +103,38 @@
 {% if ideal or distractors %}
 <div class="card mb-4">
     <div class="card-header">
-        <h5>Answer Choices</h5>
+        <h5>MCQ answer pool</h5>
     </div>
     <div class="card-body">
-        <ul class="list-group">
+        <p class="small text-muted">
+            Letters in the results table (A–E) are assigned after these options are shuffled for each evaluation run.
+            The letter shown is not necessarily the row order below.
+        </p>
+        <ul class="list-group mb-3">
             {% if ideal %}
             <li class="list-group-item list-group-item-success">
-                <strong>✓ Ideal Answer:</strong> {{ ideal }}
+                <strong>Correct answer (ideal):</strong> {{ ideal }}
             </li>
             {% endif %}
             {% if distractors %}
                 {% for distractor in distractors %}
                 <li class="list-group-item">
-                    <strong>Distractor:</strong> {{ distractor }}
+                    <strong>Distractor {{ loop.index }}:</strong> {{ distractor }}
                 </li>
                 {% endfor %}
             {% endif %}
         </ul>
+        {% if mcq_has_refusal %}
+        <p class="small text-muted mb-0">
+            Refusal MCQ configurations also include: <em>{{ mcq_refusal_option }}</em>
+        </p>
+        {% endif %}
     </div>
 </div>
 {% elif choices %}
 <div class="card mb-4">
     <div class="card-header">
-        <h5>Answer Choices</h5>
+        <h5>MCQ options (as presented to the model)</h5>
     </div>
     <div class="card-body">
         <ul class="list-group">

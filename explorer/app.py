@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import ast
 import json
@@ -49,6 +51,13 @@ _BIXBENCH_UPSTREAM_REL_PATHS = (
     'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_openended_claude-3-5-sonnet-latest_1.0.csv',
     'bixbench_results/baseline_eval_data/bixbench_llm_baseline_refusal_True_openended_gpt-4o_1.0.csv',
 )
+_BIXBENCH_HF_JSONL_DEFAULT = (
+    'https://huggingface.co/datasets/futurehouse/BixBench/resolve/main/BixBench.jsonl'
+)
+_BIXBENCH_CATALOG_MERGE_COLUMNS = (
+    'question_id', 'hypothesis', 'ideal', 'distractors', 'result', 'answer', 'paper',
+)
+_BIXBENCH_MCQ_REFUSAL_OPTION = 'Insufficient information to answer the question'
 
 
 def _env_truthy(name: str) -> bool:
@@ -60,6 +69,148 @@ def _download_file(url: str, dest: Path, timeout_sec: int = 120) -> None:
     req = urllib.request.Request(url, headers={'User-Agent': 'biobench-explorer/1'})
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
         dest.write_bytes(resp.read())
+
+
+def _parse_str_list_field(value) -> list[str] | None:
+    """Normalize ideal/distractors from HF, JSONL, or CSV into a list of strings."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        out = [str(x).strip() for x in value if x is not None and str(x).strip()]
+        return out or None
+    try:
+        if pd.isna(value):
+            return None
+    except (ValueError, TypeError):
+        pass
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            value = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return None
+    if isinstance(value, (list, tuple)):
+        out = [str(x).strip() for x in value if x is not None and str(x).strip()]
+        return out or None
+    if hasattr(value, 'tolist'):
+        value = value.tolist()
+        if isinstance(value, (list, tuple)):
+            out = [str(x).strip() for x in value if x is not None and str(x).strip()]
+            return out or None
+    return None
+
+
+def _scalar_or_none(value):
+    """Coerce a benchmark field to a template-safe scalar (None instead of NaN)."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (ValueError, TypeError):
+        pass
+    if isinstance(value, str):
+        s = value.strip()
+        return s or None
+    return value
+
+
+def _bixbench_jsonl_cache_path() -> Path:
+    return app.config['CACHE_DIR'] / 'BixBench.jsonl'
+
+
+def _load_bixbench_benchmark_from_jsonl() -> pd.DataFrame:
+    """Load flat question rows from cached or remote BixBench.jsonl."""
+    cache = _bixbench_jsonl_cache_path()
+    if not cache.is_file():
+        if _env_truthy('BIXBENCH_SKIP_REMOTE_FETCH'):
+            print('Warning: BixBench.jsonl not cached and BIXBENCH_SKIP_REMOTE_FETCH is set')
+            return pd.DataFrame()
+        url = os.environ.get('BIXBENCH_JSONL_URL', _BIXBENCH_HF_JSONL_DEFAULT)
+        try:
+            print(f'Downloading BixBench catalog from {url}...')
+            _download_file(url, cache, timeout_sec=300)
+        except URLError as e:
+            print(f'Warning: could not download BixBench.jsonl: {e}')
+            return pd.DataFrame()
+    try:
+        df = pd.read_json(cache, lines=True)
+    except Exception as e:
+        print(f'Warning: could not parse BixBench.jsonl: {e}')
+        return pd.DataFrame()
+    if df.empty or 'question_id' not in df.columns:
+        print('Warning: BixBench.jsonl missing question_id column')
+        return pd.DataFrame()
+    return df
+
+
+def _load_bixbench_benchmark_catalog() -> pd.DataFrame:
+    """Load BixBench question metadata (HF datasets API, then JSONL fallback)."""
+    try:
+        print('Loading HuggingFace BixBench dataset...')
+        hf_dataset = load_dataset('futurehouse/BixBench', split='train')
+        benchmark = hf_dataset.to_pandas()
+        if benchmark is not None and not benchmark.empty and 'question_id' in benchmark.columns:
+            print(f'Loaded {len(benchmark)} benchmark questions from HuggingFace')
+            return benchmark
+        print('Warning: HuggingFace BixBench dataset empty or missing question_id')
+    except Exception as e:
+        print(f'Warning: HuggingFace load_dataset failed: {e}')
+
+    benchmark = _load_bixbench_benchmark_from_jsonl()
+    if not benchmark.empty:
+        print(f'Loaded {len(benchmark)} benchmark questions from BixBench.jsonl')
+    return benchmark
+
+
+def _merge_benchmark_into_v1_5(benchmark: pd.DataFrame) -> None:
+    """Attach ideal/distractors and related fields to zero-shot result rows."""
+    if benchmark is None or benchmark.empty:
+        return
+    v1_5 = data.get('v1_5')
+    if v1_5 is None or v1_5.empty:
+        return
+    cols = [c for c in _BIXBENCH_CATALOG_MERGE_COLUMNS if c in benchmark.columns]
+    if 'question_id' not in cols:
+        print('Warning: benchmark catalog missing question_id; skipping merge')
+        return
+    try:
+        data['v1_5'] = v1_5.merge(
+            benchmark[cols],
+            left_on='uuid',
+            right_on='question_id',
+            how='left',
+        )
+    except Exception as e:
+        print(f'Warning: could not merge benchmark into v1.5 results: {e}')
+
+
+def _benchmark_metadata_from_row(row) -> dict:
+    """Extract display fields for question detail templates from a catalog/merged row."""
+    cols = row.index if hasattr(row, 'index') else ()
+    ideal = _scalar_or_none(row['ideal']) if 'ideal' in cols else None
+    distractors = _parse_str_list_field(row['distractors']) if 'distractors' in cols else None
+    hypothesis = _scalar_or_none(row['hypothesis']) if 'hypothesis' in cols else None
+    result = _scalar_or_none(row['result']) if 'result' in cols else None
+    paper = _scalar_or_none(row['paper']) if 'paper' in cols else None
+    answer = None
+    if 'answer' in cols:
+        answer_raw = row['answer']
+        try:
+            if pd.notna(answer_raw):
+                answer = bool(answer_raw)
+        except (ValueError, TypeError):
+            answer = None
+    return {
+        'ideal': ideal,
+        'distractors': distractors,
+        'hypothesis': hypothesis,
+        'result': result,
+        'paper': paper,
+        'answer': answer,
+    }
 
 
 def _ensure_bixbench_baseline_files() -> None:
@@ -220,24 +371,8 @@ def load_data():
     else:
         data['original_json'] = {}
 
-    # Load HuggingFace benchmark dataset
-    try:
-        print("Loading HuggingFace BixBench dataset...")
-        hf_dataset = load_dataset("futurehouse/BixBench", split="train")
-        data['benchmark'] = hf_dataset.to_pandas()
-        print(f"Loaded {len(data['benchmark'])} benchmark questions from HuggingFace")
-
-        # Merge benchmark data with v1.5 results on question_id
-        if data['v1_5'] is not None and not data['v1_5'].empty:
-            data['v1_5'] = data['v1_5'].merge(
-                data['benchmark'][['question_id', 'hypothesis', 'ideal', 'distractors', 'result', 'answer', 'paper']],
-                left_on='uuid',
-                right_on='question_id',
-                how='left'
-            )
-    except Exception as e:
-        print(f"Warning: Could not load HuggingFace dataset: {e}")
-        data['benchmark'] = pd.DataFrame()
+    data['benchmark'] = _load_bixbench_benchmark_catalog()
+    _merge_benchmark_into_v1_5(data['benchmark'])
 
     # CompBioBench question catalog (TSV next to this app)
     comp_path = Path(__file__).parent / 'compbiobench.v1.tsv'
@@ -781,8 +916,12 @@ def question_detail(qid):
     # Get question from v1.5 data
     v1_5_rows = data['v1_5'][data['v1_5']['uuid'] == qid]
 
-    # Get question from original data (for choices if available)
-    original_rows = data['original'][data['original']['uuid'] == qid]
+    # Get question from original data (for choices if available; legacy UUID scheme)
+    original_df = data.get('original')
+    if original_df is not None and not original_df.empty and 'uuid' in original_df.columns:
+        original_rows = original_df[original_df['uuid'] == qid]
+    else:
+        original_rows = pd.DataFrame()
 
     if len(v1_5_rows) == 0:
         return "Question not found", 404
@@ -796,33 +935,13 @@ def question_detail(qid):
     capsule_match = re.search(r'(?i)(bix-\d+)', uuid)
     capsule_id = capsule_match.group(1) if capsule_match else None
 
-    # Get benchmark metadata (hypothesis, ideal, distractors)
-    hypothesis = v1_5_rows.iloc[0].get('hypothesis') if 'hypothesis' in v1_5_rows.columns else None
-    ideal = v1_5_rows.iloc[0].get('ideal') if 'ideal' in v1_5_rows.columns else None
-
-    # Convert distractors to list if available
-    distractors = None
-    if 'distractors' in v1_5_rows.columns:
-        distractors_raw = v1_5_rows.iloc[0].get('distractors')
-        try:
-            if pd.notna(distractors_raw):
-                distractors = list(distractors_raw) if hasattr(distractors_raw, '__iter__') and not isinstance(distractors_raw, str) else None
-        except (ValueError, TypeError):
-            distractors = None
-
-    result = v1_5_rows.iloc[0].get('result') if 'result' in v1_5_rows.columns else None
-
-    # Convert answer to Python bool
-    answer = None
-    if 'answer' in v1_5_rows.columns:
-        answer_raw = v1_5_rows.iloc[0].get('answer')
-        try:
-            if pd.notna(answer_raw):
-                answer = bool(answer_raw)
-        except (ValueError, TypeError):
-            answer = None
-
-    paper = v1_5_rows.iloc[0].get('paper') if 'paper' in v1_5_rows.columns else None
+    meta = _benchmark_metadata_from_row(v1_5_rows.iloc[0])
+    hypothesis = meta['hypothesis']
+    ideal = meta['ideal']
+    distractors = meta['distractors']
+    result = meta['result']
+    answer = meta['answer']
+    paper = meta['paper']
 
     # Get choices if available
     choices = None
@@ -843,6 +962,8 @@ def question_detail(qid):
         for row in configs:
             row['sure'] = False
 
+    mcq_has_refusal = any(c.get('eval_type') == 'mcq-refusal' for c in configs)
+
     return render_template(
         'question.html',
         is_compbiobench=False,
@@ -858,6 +979,8 @@ def question_detail(qid):
         result=result,
         answer=answer,
         paper=paper,
+        mcq_has_refusal=mcq_has_refusal,
+        mcq_refusal_option=_BIXBENCH_MCQ_REFUSAL_OPTION,
     )
 
 
@@ -868,11 +991,7 @@ def _bixbench_catalog_question_detail(qid):
         return "Question not found", 404
 
     row = rows.iloc[0]
-    distractors = row.get('distractors') if 'distractors' in rows.columns else None
-    if hasattr(distractors, '__iter__') and not isinstance(distractors, str):
-        distractors = list(distractors)
-    else:
-        distractors = None
+    meta = _benchmark_metadata_from_row(row)
 
     return render_template(
         'question.html',
@@ -883,12 +1002,14 @@ def _bixbench_catalog_question_detail(qid):
         choices=None,
         configs=[],
         capsule_id=row.get('capsule_id'),
-        hypothesis=row.get('hypothesis') if 'hypothesis' in rows.columns else None,
-        ideal=row.get('ideal') if 'ideal' in rows.columns else None,
-        distractors=distractors,
-        result=row.get('result') if 'result' in rows.columns else None,
-        answer=row.get('answer') if 'answer' in rows.columns else None,
-        paper=row.get('paper') if 'paper' in rows.columns else None,
+        hypothesis=meta['hypothesis'],
+        ideal=meta['ideal'],
+        distractors=meta['distractors'],
+        result=meta['result'],
+        answer=meta['answer'],
+        paper=meta['paper'],
+        mcq_has_refusal=False,
+        mcq_refusal_option=_BIXBENCH_MCQ_REFUSAL_OPTION,
     )
 
 
