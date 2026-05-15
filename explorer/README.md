@@ -97,7 +97,7 @@ Create a Render Web Service pointed at this repository:
 
 - **Root directory:** `explorer`
 - **Build command:** `pip install -r requirements.txt`
-- **Start command:** `gunicorn wsgi:application`
+- **Start command:** `gunicorn wsgi:application --bind 0.0.0.0:$PORT`
 
 The free web service filesystem is ephemeral, which is fine for this app's capsule cache. Downloaded capsule files are cached under `explorer/cache/` while the instance is alive and may disappear after restarts, redeploys, or spin-downs.
 

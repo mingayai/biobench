@@ -9,6 +9,12 @@
 
 <h1 class="mb-4">Capsule: <code>{{ capsule_id }}</code></h1>
 
+{% if has_eval_results is defined and not has_eval_results %}
+<div class="alert alert-info">
+    Evaluation result CSVs are not available in this deployment, so accuracy cards are placeholders. Capsule questions and data loading are still available.
+</div>
+{% endif %}
+
 <div class="row mb-4">
     <div class="col-md-3">
         <div class="card">

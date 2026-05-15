@@ -190,6 +190,46 @@ def _cell_bool(val) -> bool:
     return str(val).strip().lower() in ('true', '1', 'yes', 't')
 
 
+def _has_columns(df: pd.DataFrame, columns: list) -> bool:
+    return df is not None and not df.empty and all(col in df.columns for col in columns)
+
+
+def _bixbench_catalog_df() -> pd.DataFrame:
+    """Return the HuggingFace BixBench catalog in the shape templates expect."""
+    df = data.get('benchmark')
+    if df is None or df.empty:
+        return pd.DataFrame(columns=['uuid', 'question', 'target', 'capsule_id'])
+
+    catalog = df.copy()
+    if 'question_id' in catalog.columns:
+        catalog['uuid'] = catalog['question_id']
+    elif 'uuid' not in catalog.columns:
+        catalog['uuid'] = ''
+
+    if 'question' not in catalog.columns:
+        if 'hypothesis' in catalog.columns:
+            catalog['question'] = catalog['hypothesis']
+        else:
+            catalog['question'] = catalog['uuid']
+
+    if 'target' not in catalog.columns:
+        if 'answer' in catalog.columns:
+            catalog['target'] = catalog['answer']
+        elif 'result' in catalog.columns:
+            catalog['target'] = catalog['result']
+        else:
+            catalog['target'] = ''
+
+    catalog['capsule_id'] = catalog['uuid'].astype(str).str.extract(r'(?i)(bix-\d+)')[0]
+    catalog['gpt_correct'] = None
+    catalog['claude_correct'] = None
+    return catalog
+
+
+def _bixbench_results_available() -> bool:
+    return _has_columns(data.get('v1_5'), ['uuid', 'question', 'eval_type', 'model', 'correct'])
+
+
 def _compbiobench_dashboard():
     df = data.get('compbiobench')
     if df is None or df.empty:
@@ -588,8 +628,8 @@ def dashboard():
     if ds == DATASET_BIOMYSTERY:
         return _biomystery_dashboard()
 
-    v1_5_metrics = data['v1_5_json']
-    original_metrics = data['original_json']
+    v1_5_metrics = data.get('v1_5_json') or {}
+    original_metrics = data.get('original_json') or {}
 
     # Prepare data for charts - v1.5
     v1_5_chart_data = {
@@ -673,6 +713,9 @@ def questions():
         return _compbiobench_questions()
     if ds == DATASET_BIOMYSTERY:
         return _biomystery_questions()
+
+    if not _bixbench_results_available():
+        return _bixbench_catalog_questions()
 
     df = data['v1_5'].copy()
 
@@ -764,6 +807,48 @@ def questions():
     )
 
 
+def _bixbench_catalog_questions():
+    """Question list fallback when local evaluation result CSVs are not deployed."""
+    df = _bixbench_catalog_df()
+    capsule = request.args.get('capsule')
+    page = int(request.args.get('page', 1))
+    per_page = 20
+
+    if capsule and not df.empty:
+        df = df[df['uuid'].astype(str).str.contains(capsule, case=False, na=False)]
+
+    questions_list = df.drop_duplicates(subset=['uuid']).to_dict('records') if not df.empty else []
+    total = len(questions_list)
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    all_catalog = _bixbench_catalog_df()
+    capsules = sorted(all_catalog['capsule_id'].dropna().unique()) if not all_catalog.empty else []
+
+    return render_template(
+        'questions.html',
+        is_compbiobench=False,
+        questions=questions_list[start:end],
+        page=page,
+        total_pages=max(1, (total + per_page - 1) // per_page),
+        total=total,
+        capsules=capsules,
+        eval_modes=[],
+        eval_types=[],
+        models=[],
+        domains=[],
+        styles=[],
+        skills_options=[],
+        filters={
+            'capsule': capsule,
+            'eval_mode': None,
+            'eval_type': None,
+            'model': None,
+            'correct': None,
+        },
+    )
+
+
 @app.route('/questions/<qid>')
 def question_detail(qid):
     """Single question detail view"""
@@ -772,6 +857,9 @@ def question_detail(qid):
         return _compbiobench_question_detail(qid)
     if ds == DATASET_BIOMYSTERY:
         return _biomystery_question_detail(qid)
+
+    if not _bixbench_results_available():
+        return _bixbench_catalog_question_detail(qid)
 
     # Get question from v1.5 data
     v1_5_rows = data['v1_5'][data['v1_5']['uuid'] == qid]
@@ -850,6 +938,37 @@ def question_detail(qid):
     )
 
 
+def _bixbench_catalog_question_detail(qid):
+    catalog = _bixbench_catalog_df()
+    rows = catalog[catalog['uuid'] == qid] if not catalog.empty else pd.DataFrame()
+    if len(rows) == 0:
+        return "Question not found", 404
+
+    row = rows.iloc[0]
+    distractors = row.get('distractors') if 'distractors' in rows.columns else None
+    if hasattr(distractors, '__iter__') and not isinstance(distractors, str):
+        distractors = list(distractors)
+    else:
+        distractors = None
+
+    return render_template(
+        'question.html',
+        is_compbiobench=False,
+        uuid=row.get('uuid'),
+        question=row.get('question'),
+        target=row.get('target'),
+        choices=None,
+        configs=[],
+        capsule_id=row.get('capsule_id'),
+        hypothesis=row.get('hypothesis') if 'hypothesis' in rows.columns else None,
+        ideal=row.get('ideal') if 'ideal' in rows.columns else None,
+        distractors=distractors,
+        result=row.get('result') if 'result' in rows.columns else None,
+        answer=row.get('answer') if 'answer' in rows.columns else None,
+        paper=row.get('paper') if 'paper' in rows.columns else None,
+    )
+
+
 @app.route('/capsules')
 def capsules():
     """Capsules overview grouped by UUID"""
@@ -858,6 +977,9 @@ def capsules():
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
     if ds == DATASET_BIOMYSTERY:
         return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
+
+    if not _bixbench_results_available():
+        return _bixbench_catalog_capsules()
 
     df = data['v1_5'].copy()
     
@@ -889,6 +1011,24 @@ def capsules():
 
     return render_template('capsules.html', capsules=capsule_stats)
 
+
+def _bixbench_catalog_capsules():
+    catalog = _bixbench_catalog_df()
+    capsule_stats = []
+    if not catalog.empty:
+        for capsule_id in sorted(catalog['capsule_id'].dropna().unique()):
+            capsule_data = catalog[catalog['capsule_id'] == capsule_id]
+            capsule_stats.append({
+                'id': capsule_id,
+                'total_questions': len(capsule_data['uuid'].unique()),
+                'gpt_accuracy': 0,
+                'claude_accuracy': 0,
+                'overall_accuracy': 0,
+            })
+
+    return render_template('capsules.html', capsules=capsule_stats, has_eval_results=False)
+
+
 @app.route('/capsules/<capsule_id>')
 def capsule_detail(capsule_id):
     """Single capsule detail view"""
@@ -897,6 +1037,9 @@ def capsule_detail(capsule_id):
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
     if ds == DATASET_BIOMYSTERY:
         return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
+
+    if not _bixbench_results_available():
+        return _bixbench_catalog_capsule_detail(capsule_id)
 
     df = data['v1_5'].copy()
     
@@ -933,6 +1076,36 @@ def capsule_detail(capsule_id):
                          data_loaded=data_loaded,
                          file_list=file_list,
                          has_notebook=has_notebook)
+
+
+def _bixbench_catalog_capsule_detail(capsule_id):
+    catalog = _bixbench_catalog_df()
+    capsule_data = catalog[catalog['capsule_id'] == capsule_id] if not catalog.empty else pd.DataFrame()
+
+    if len(capsule_data) == 0:
+        return "Capsule not found", 404
+
+    questions = capsule_data.drop_duplicates(subset=['uuid'])
+    stats = {
+        'total_questions': len(questions),
+        'gpt_accuracy': 0,
+        'claude_accuracy': 0,
+        'overall_accuracy': 0,
+    }
+
+    data_loaded = capsule_id in data['capsules']
+    capsule_info = data['capsules'].get(capsule_id, {})
+    file_list = capsule_info.get('files', []) if data_loaded else []
+    has_notebook = capsule_info.get('notebook_path') is not None if data_loaded else False
+
+    return render_template('capsule.html',
+                         capsule_id=capsule_id,
+                         stats=stats,
+                         questions=questions.to_dict('records'),
+                         data_loaded=data_loaded,
+                         file_list=file_list,
+                         has_notebook=has_notebook,
+                         has_eval_results=False)
 
 
 def _format_mb(byte_count: Optional[int]) -> str:
@@ -1225,6 +1398,17 @@ def compare():
         return redirect(url_for('dashboard', dataset=DATASET_COMPBIO))
     if ds == DATASET_BIOMYSTERY:
         return redirect(url_for('dashboard', dataset=DATASET_BIOMYSTERY))
+
+    if not _bixbench_results_available():
+        return render_template('compare.html',
+                             comparisons=[],
+                             counts={'both_correct': 0, 'both_wrong': 0, 'gpt_only': 0, 'claude_only': 0},
+                             percentages={'both_correct': 0, 'both_wrong': 0, 'gpt_only': 0, 'claude_only': 0},
+                             total=0,
+                             total_filtered=0,
+                             page=1,
+                             total_pages=1,
+                             filter_cat=request.args.get('category'))
 
     df = data['v1_5'].copy()
 

@@ -6,7 +6,11 @@
 <h1 class="mb-4">Capsule Explorer</h1>
 
 <div class="alert alert-info">
+    {% if has_eval_results is defined and not has_eval_results %}
+    <strong>Note:</strong> Evaluation result CSVs are not available in this deployment, so accuracy columns are placeholders. Capsule question lists and HuggingFace data loading are still available.
+    {% else %}
     <strong>Note:</strong> Capsules are sorted by overall accuracy (hardest first). Each capsule contains biological datasets and questions. Accuracy shown is for MCQ No-Refusal evaluation only.
+    {% endif %}
 </div>
 
 <div class="card">
