@@ -22,6 +22,10 @@ app.config['MIN_FREE_DISK_BYTES'] = int(os.environ.get('MIN_FREE_DISK_MB', '200'
 DATASET_BIXBENCH = 'bixbench'
 DATASET_COMPBIO = 'compbiobench'
 
+# App root is the explorer/ directory (local cwd and Render service root).
+APP_ROOT = Path(__file__).resolve().parent
+BIXBENCH_DIR = APP_ROOT / 'BixBench'
+
 # Columns expected on local zero-shot CSVs merged with benchmark metadata — used across
 # /questions, /questions/<id>, /capsules, /compare when evaluation results are enabled.
 _BIXBENCH_V15_RESULT_COLUMNS = frozenset({
@@ -80,7 +84,7 @@ def load_data():
         # `huggingface_hub` / `datasets` read HF_TOKEN; Render often sets HUGGING_FACE_HUB_TOKEN only.
         os.environ['HF_TOKEN'] = hf_token
 
-    base_path = Path(__file__).parent / 'BixBench'
+    base_path = BIXBENCH_DIR
 
     # Load v1.5 CSVs
     v1_5_path = base_path / 'bixbench-v1.5_results' / 'zero_shot_baselines'

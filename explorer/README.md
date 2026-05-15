@@ -99,7 +99,7 @@ Create a Render Web Service pointed at this repository:
 - **Build command:** `pip install -r requirements.txt`
 - **Start command:** `gunicorn wsgi:application --bind 0.0.0.0:$PORT`
 
-The free web service filesystem is ephemeral, which is fine for this app's capsule cache. Downloaded capsule files are cached under `explorer/cache/` while the instance is alive and may disappear after restarts, redeploys, or spin-downs.
+The free web service filesystem is ephemeral, which is fine for this app's capsule cache. Downloaded capsule files are cached under `cache/` while the instance is alive and may disappear after restarts, redeploys, or spin-downs.
 
 Optional environment variables:
 
@@ -120,7 +120,7 @@ Optional environment variables:
 
 ## Data Sources
 
-The app automatically loads (paths relative to `explorer/`):
+The app automatically loads from the service working directory (Render root directory: `explorer`):
 - v1.5 results: `BixBench/bixbench-v1.5_results/zero_shot_baselines/*.csv`
 - Original results: `BixBench/bixbench_results/baseline_eval_data/*.csv`
 - Capsule data: Downloaded on-demand from HuggingFace (`futurehouse/bixbench`)
@@ -128,19 +128,18 @@ The app automatically loads (paths relative to `explorer/`):
 ## File Structure
 
 ```
-explorer/
-├── BixBench/           # Baseline CSVs/JSON (v1.5 + original results)
-├── app.py              # Flask application
-├── templates/
-│   ├── base.html       # Base template
-│   ├── dashboard.html  # Dashboard page
-│   ├── questions.html  # Questions list
-│   ├── question.html   # Question detail
-│   ├── capsules.html   # Capsules list
-│   ├── capsule.html    # Capsule detail
-│   └── compare.html    # Model comparison
-├── cache/              # Capsule data cache (created on-demand)
-└── requirements.txt    # Python dependencies
+BixBench/               # Baseline CSVs/JSON (v1.5 + original results)
+app.py                  # Flask application
+templates/
+├── base.html           # Base template
+├── dashboard.html      # Dashboard page
+├── questions.html      # Questions list
+├── question.html       # Question detail
+├── capsules.html       # Capsules list
+├── capsule.html        # Capsule detail
+└── compare.html        # Model comparison
+cache/                  # Capsule data cache (created on-demand)
+requirements.txt        # Python dependencies
 ```
 
 ## Troubleshooting
