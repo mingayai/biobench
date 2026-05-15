@@ -23,6 +23,20 @@ DATASET_BIXBENCH = 'bixbench'
 DATASET_COMPBIO = 'compbiobench'
 DATASET_BIOMYSTERY = 'biomysterybench'
 
+# Columns expected on local zero-shot CSVs merged with benchmark metadata — used across
+# /questions, /questions/<id>, /capsules, /compare when evaluation results are enabled.
+_BIXBENCH_V15_RESULT_COLUMNS = frozenset({
+    'uuid',
+    'question',
+    'target',
+    'eval_type',
+    'model',
+    'correct',
+    'evaluation_mode',
+    'predicted',
+    'grade',
+})
+
 
 class CapsuleTooLargeError(Exception):
     """Raised when a capsule would exceed the configured ephemeral disk budget."""
@@ -64,6 +78,11 @@ data = {
 
 def load_data():
     """Load all CSV and JSON files on startup"""
+    hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+    if hf_token:
+        # `huggingface_hub` / `datasets` read HF_TOKEN; Render often sets HUGGING_FACE_HUB_TOKEN only.
+        os.environ['HF_TOKEN'] = hf_token
+
     base_path = Path(__file__).parent.parent / 'BixBench'
 
     # Load v1.5 CSVs
@@ -79,6 +98,9 @@ def load_data():
             df['model'] = 'gpt-4o'
         elif 'claude' in filename:
             df['model'] = 'claude-3.5-sonnet'
+        else:
+            print(f"Warning: skipping v1.5 CSV (cannot infer model from filename): {csv_file.name}")
+            continue
 
         if 'mcq-refusal-False' in filename:
             df['eval_type'] = 'mcq-no-refusal'
@@ -86,6 +108,9 @@ def load_data():
             df['eval_type'] = 'mcq-refusal'
         elif 'openended' in filename:
             df['eval_type'] = 'openended'
+        else:
+            print(f"Warning: skipping v1.5 CSV (cannot infer eval type from filename): {csv_file.name}")
+            continue
 
         v1_5_dfs.append(df)
 
@@ -112,6 +137,9 @@ def load_data():
             df['model'] = 'gpt-4o'
         elif 'claude' in filename:
             df['model'] = 'claude-3.5-sonnet'
+        else:
+            print(f"Warning: skipping original baseline CSV (cannot infer model from filename): {csv_file.name}")
+            continue
 
         if 'refusal_False_mcq' in filename:
             df['eval_type'] = 'mcq-no-refusal'
@@ -119,6 +147,9 @@ def load_data():
             df['eval_type'] = 'mcq-refusal'
         elif 'openended' in filename:
             df['eval_type'] = 'openended'
+        else:
+            print(f"Warning: skipping original baseline CSV (cannot infer eval type from filename): {csv_file.name}")
+            continue
 
         original_dfs.append(df)
 
@@ -190,10 +221,6 @@ def _cell_bool(val) -> bool:
     return str(val).strip().lower() in ('true', '1', 'yes', 't')
 
 
-def _has_columns(df: pd.DataFrame, columns: list) -> bool:
-    return df is not None and not df.empty and all(col in df.columns for col in columns)
-
-
 def _bixbench_catalog_df() -> pd.DataFrame:
     """Return the HuggingFace BixBench catalog in the shape templates expect."""
     df = data.get('benchmark')
@@ -227,7 +254,8 @@ def _bixbench_catalog_df() -> pd.DataFrame:
 
 
 def _bixbench_results_available() -> bool:
-    return _has_columns(data.get('v1_5'), ['uuid', 'question', 'eval_type', 'model', 'correct'])
+    df = data.get('v1_5')
+    return df is not None and not df.empty and _BIXBENCH_V15_RESULT_COLUMNS.issubset(df.columns)
 
 
 def _compbiobench_dashboard():
@@ -661,7 +689,11 @@ def dashboard():
 
     # Compute per-evaluation_mode breakdown from v1.5 data
     eval_mode_stats = []
-    if data['v1_5'] is not None and not data['v1_5'].empty:
+    if (
+        data['v1_5'] is not None
+        and not data['v1_5'].empty
+        and {'eval_type', 'evaluation_mode', 'correct', 'model'}.issubset(data['v1_5'].columns)
+    ):
         df_v1_5 = data['v1_5']
         # Filter to mcq-no-refusal for consistent comparison
         df_mcq = df_v1_5[df_v1_5['eval_type'] == 'mcq-no-refusal']
@@ -730,7 +762,7 @@ def questions():
 
     if capsule:
         df = df[df['uuid'].str.contains(capsule, case=False, na=False)]
-    if eval_mode:
+    if eval_mode and 'evaluation_mode' in df.columns:
         df = df[df['evaluation_mode'] == eval_mode]
     if eval_type:
         df = df[df['eval_type'] == eval_type]
@@ -779,9 +811,11 @@ def questions():
 
     # Get dropdowns for filter form
     capsules = sorted(df['uuid'].str.split('-q').str[0].unique())
-    eval_modes = sorted(df['evaluation_mode'].dropna().unique())
-    eval_types = sorted(df['eval_type'].unique())
-    models = sorted(df['model'].unique())
+    eval_modes = (
+        sorted(df['evaluation_mode'].dropna().unique()) if 'evaluation_mode' in df.columns else []
+    )
+    eval_types = sorted(df['eval_type'].unique()) if 'eval_type' in df.columns else []
+    models = sorted(df['model'].unique()) if 'model' in df.columns else []
 
     return render_template(
         'questions.html',
@@ -918,7 +952,13 @@ def question_detail(qid):
                 choices = None
 
     # Get all configurations for this question
-    configs = v1_5_rows[['model', 'eval_type', 'predicted', 'grade', 'correct', 'sure', 'evaluation_mode']].to_dict('records')
+    cfg_cols = ['model', 'eval_type', 'predicted', 'grade', 'correct', 'evaluation_mode']
+    if 'sure' in v1_5_rows.columns:
+        cfg_cols.append('sure')
+    configs = v1_5_rows[cfg_cols].to_dict('records')
+    if 'sure' not in cfg_cols:
+        for row in configs:
+            row['sure'] = False
 
     return render_template(
         'question.html',
